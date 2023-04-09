@@ -1,0 +1,101 @@
+#!/bin/bash
+
+DEV=${1?must specify a device}
+
+function finish {
+    for d in boot dev/pts dev proc sys; do
+        if test -d "$PWD/usbroot/$d" && mount | grep -q "$PWD/usbroot/$d"; then
+            umount "$PWD/usbroot/$d"
+        fi
+    done
+
+    if test -d usbroot; then
+        if mount | grep -q "$PWD/usbroot"; then
+            umount "./usbroot"
+        fi
+        rmdir usbroot
+    fi
+}
+
+ROOT_FS_TYPE=btrfs
+DEBIAN_RELEASE=bullseye
+
+set -e -x
+
+: "Check that $DEV has partitions ${DEV}1 (boot) and ${DEV}2 (root)"
+sfdisk -V "$DEV"
+test -b "${DEV}1" -a -b "${DEV}2"
+
+: Set partition table properties
+sfdisk --part-type "$DEV" 1 b
+sfdisk --part-type "$DEV" 2 83
+sfdisk -A "$DEV" 1
+sync
+sync
+
+: Create filesystems
+mkdosfs -n LINUXBOOT "${DEV}1"
+# "mkfs.${ROOT_FS_TYPE}" -L linuxroot -F "${DEV}2"
+"mkfs.${ROOT_FS_TYPE}" -L linuxroot -f "${DEV}2"
+UUID1=$(blkid "${DEV}1" | sed -n 's/.*\<UUID="\([0-9a-fA-F-]\+\)".*/\1/p')
+UUID2=$(blkid "${DEV}2" | sed -n 's/.*\<UUID="\([0-9a-fA-F-]\+\)".*/\1/p')
+
+trap finish EXIT
+
+: Mount root
+mkdir -p usbroot
+mount -t "$ROOT_FS_TYPE" "${DEV}2" usbroot
+
+: Mount boot
+mkdir -p usbroot/boot
+mount -t vfat "${DEV}1" ./usbroot/boot
+
+: Build root partition
+mkdir -p usbroot/etc
+cat <<END >usbroot/etc/fstab
+UUID=$UUID2 /     $ROOT_FS_TYPE defaults,noatime 0 0
+UUID=$UUID1 /boot vfat defaults         0 0
+END
+export DEBIAN_FRONTEND=noninteractive
+if ! [ -f "${DEBIAN_RELEASE}.tar" ]; then
+    debootstrap --make-tarball="${DEBIAN_RELEASE}.tar" "$DEBIAN_RELEASE" tmp http://ftp.debian.org/debian
+fi
+debootstrap "--unpack-tarball=$PWD/${DEBIAN_RELEASE}.tar" "$DEBIAN_RELEASE" usbroot http://ftp.debian.org/debian
+mount -t devtmpfs dev ./usbroot/dev
+mount -t devpts devpts ./usbroot/dev/pts
+mount -t proc proc ./usbroot/proc
+mount -t sysfs sysfs ./usbroot/sys
+chroot usbroot apt-get install --no-install-recommends -y \
+    rsync \
+    tshark tcpdump \
+    smartmontools \
+    dosfstools \
+    ntfs-3g \
+    locales \
+    aptitude \
+    lvm2 \
+    cryptsetup \
+    busybox-static \
+    kbd console-setup \
+    linux-image-amd64 \
+    syslinux
+echo livedeb >usbroot/etc/hostname
+chroot usbroot /bin/bash -c 'echo "root:root" | chpasswd'
+
+: Build boot partition
+LINUX_VERSION=$(ls usbroot/boot/vmlinuz-* | sed -n 's@.*vmlinuz-\(.*\)@\1@p')
+VMLINUX_FILENAME="vmlinuz-${LINUX_VERSION}"
+INITRD_FILENAME="initrd.img-${LINUX_VERSION}"
+syslinux "${DEV}1"
+cat /usr/lib/SYSLINUX/mbr.bin >"$DEV"
+cat <<END >usbroot/boot/syslinux.cfg
+default linux
+timeout 1
+prompt 1
+label linux
+    kernel $VMLINUX_FILENAME
+    append initrd=$INITRD_FILENAME root=UUID=$UUID2 ro
+END
+
+: root password is root
+: To test: qemu-system-x86_64 -m 512 -hda "$DEV"

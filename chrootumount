@@ -1,0 +1,9 @@
+#!/bin/sh
+
+set -x
+
+umount ./dev/pts
+umount ./dev
+umount ./proc
+umount ./sys
+umount ./run
