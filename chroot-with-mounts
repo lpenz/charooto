@@ -19,6 +19,7 @@ set -e -x
 mount -t devtmpfs dev "$TARGET/dev"
 mkdir -p "$TARGET/dev/pts"
 mount -t devpts devpts "$TARGET/dev/pts"
+mount -t tmpfs tmpfs "$TARGET/dev/shm"
 mount -t proc proc "$TARGET/proc"
 mount -t sysfs sysfs "$TARGET/sys"
 mount -t tmpfs tmpfs "$TARGET/run"

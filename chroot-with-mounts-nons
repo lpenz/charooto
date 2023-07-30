@@ -6,24 +6,28 @@ set -e -x
 
 mount -t devtmpfs dev "$TARGET/dev"
 trap 'umount -l "$TARGET/dev"' EXIT
-mkdir -p dev/pts
+mkdir -p dev/pts dev/shm
 (
-    mount -t devpts devpts "$TARGET/dev/pts"
-    trap 'umount "$TARGET/dev/pts"' EXIT
-    (
-        mount -t proc proc "$TARGET/proc"
-        trap 'umount "$TARGET/proc"' EXIT
-        (
-            mount -t sysfs sysfs "$TARGET/sys"
-            trap 'umount "$TARGET/sys"' EXIT
-            (
-                mount -t none -o bind /run "$TARGET/run"
-                trap 'umount "$TARGET/run"' EXIT
-                mkdir -p "$TARGET/run/lock" "$TARGET/run/shm"
+	mount -t devpts devpts "$TARGET/dev/pts"
+	trap 'umount "$TARGET/dev/pts"' EXIT
+	(
+		mount -t tmpfs tmpfs "$TARGET/dev/shm"
+		trap 'umount "$TARGET/dev/shm"' EXIT
+		(
+			mount -t proc proc "$TARGET/proc"
+			trap 'umount "$TARGET/proc"' EXIT
+			(
+				mount -t sysfs sysfs "$TARGET/sys"
+				trap 'umount "$TARGET/sys"' EXIT
+				(
+					mount -t tmpfs "$TARGET/run" "$TARGET/run"
+					trap 'umount "$TARGET/run"' EXIT
+					mkdir -p "$TARGET/run/lock" "$TARGET/run/shm"
 
-                chroot "$@"
+					chroot "$@"
 
-            )
-        )
-    )
+				)
+			)
+		)
+	)
 )

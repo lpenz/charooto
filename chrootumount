@@ -2,6 +2,7 @@
 
 set -x
 
+umount ./dev/shm
 umount ./dev/pts
 umount ./dev
 umount ./proc
