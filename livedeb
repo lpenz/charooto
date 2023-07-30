@@ -79,6 +79,8 @@ chroot usbroot apt-get install --no-install-recommends -y \
     kbd console-setup \
     linux-image-amd64 \
     syslinux
+sed -i 's@^# *\(en_US.UTF-8.*\)@\1@' /etc/locale.gen
+locale-gen
 echo livedeb >usbroot/etc/hostname
 chroot usbroot /bin/bash -c 'echo "root:root" | chpasswd'
 
