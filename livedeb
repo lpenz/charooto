@@ -85,7 +85,7 @@ echo livedeb >usbroot/etc/hostname
 chroot usbroot /bin/bash -c 'echo "root:root" | chpasswd'
 
 : Build boot partition
-LINUX_VERSION=$(ls usbroot/boot/vmlinuz-* | sed -n 's@.*vmlinuz-\(.*\)@\1@p')
+LINUX_VERSION=$(find usbroot/boot/vmlinuz-* | sed -n 's@.*vmlinuz-\(.*\)@\1@p')
 VMLINUX_FILENAME="vmlinuz-${LINUX_VERSION}"
 INITRD_FILENAME="initrd.img-${LINUX_VERSION}"
 syslinux "${DEV}1"
